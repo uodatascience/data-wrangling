@@ -1,0 +1,104 @@
+---
+title: "graphAnyROI_RClub20161013"
+author: "Theresa Cheng"
+date: "October 12, 2016"
+output: html_document
+---
+
+Input MarsBar ROI raw parameters. Outputs graphs of your ROIs.
+
+# Load packages
+```{r, echo=FALSE}
+osuRepo<-'http://ftp.osuosl.org/pub/cran/'
+
+#Check if the packages we need are installed, and if not, install them
+#if(!require(plyr)){install.packages('plyr',repos=osuRepo)}
+  #library(plyr)
+if(!require(dplyr)){install.packages('dplyr',repos=osuRepo)}
+  library(dplyr)
+if(!require(tidyr)){install.packages('tidyr',repos=osuRepo)}
+  library(tidyr)
+if(!require(ggplot2)){install.packages('data.table',repos=osuRepo)}
+  library(ggplot2)
+```
+
+# Acquire the dataframe
+```{r}
+rm(list=ls()) # clear all
+
+setwd("/Users/theresacheng/Documents/R Club/") # set the working directory to the file location
+
+subjectList=c("101","102","103","104","105","106","107","108","109","110")
+roiList=c("ROI1","ROI2","ROI3")
+condList=c("cond1","cond2")
+
+df.ROI1_raw=read.csv("ROI1_RClub20161013.csv", header=TRUE) # read in the filename 
+df.allROIs_raw=read.csv("ROI_all_RClub20161013.csv", header=TRUE) 
+```
+
+# Attempt 1: No tidyr
+```{r}
+#View(df.ROI1_raw) # note that the subject ID list repeats
+
+# re-arrange the dataframe so that each column is a condition
+df.ROI1=as.data.frame(subjectList) # set up a new dataframe 
+
+for (i in 1:length(subjectList)){ # fill in this dataframe
+  df.ROI1$cond1[i]=df.ROI1_raw$ROI1[i]
+  df.ROI1$cond2[i]=df.ROI1_raw$ROI1[i+length(subjectList)]
+}
+
+# summarize data
+df.ROI1_avg=as.data.frame(matrix(rep(NA, 3*length(condList)), ncol=3)) # set up a dataframe with summary parameters
+colnames(df.ROI1_avg)=c("cond","mean","se") # name the columns
+
+for (i in 1:length(condList)){ # fill in the dataframe with the appropriate parameters
+  df.ROI1_avg$cond[i]=condList[i]
+  df.ROI1_avg$mean[i]=mean(df.ROI1[,i+1])
+  df.ROI1_avg$se[i]=sd(df.ROI1[,i+1])/sqrt(length(subjectList))
+}
+
+# plot this
+ggplot(df.ROI1_avg, aes(x=cond, y=mean)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(aes(ymin=mean-1.96*se, ymax=mean+1.96*se), width=.3)
+```
+
+# Attempt 2. No tidyr + code flexibly for any number of ROIs and conditions using for loops = sadness
+```{r}
+#View(df.allROIs_raw)
+
+df.allROIs=as.data.frame(subjectList) # set up the dataframe 
+
+for (i in 1:length(subjectList)){
+  for (j in 1:(length(roiList))){
+      for (k in 1:(length(condList))){
+          #ugh no
+      }}}
+
+# find me a better way
+```
+
+# Attempt 3: dplyr/tidyr= sanity, elegance, nirvana
+```{r}
+df.allROIs= df.allROIs_raw # copy the raw data set
+
+df.allROIs$cond=rep(1:length(condList), each=length(subjectList)) %>% as.factor() # create a variable called condition, fill it with values, make it a factor
+
+df.allROIs=gather(df.allROIs, "ROI", "betas", 2:(1+length(roiList))) # use tidyr MAGIC. take df.allROIs and create two new columns called ROI and beta. The ROI column will be populated by the column names of columns 2-4, while the beta column will be populated by the values in the dataframe 
+df.allROIs$ROI=as.factor(df.allROIs$ROI) # make this new ROI variable a factor
+
+# summary statistics
+df.allROIs_avg= df.allROIs %>% group_by(ROI, cond) %>% summarise(mean=mean(betas),se=sd(betas)/sqrt(length(subjectList))) # copy the old df but group it by ROI and condition, and then calculate the mean and se for each ROI-condition combo
+
+#plot it
+ggplot(df.allROIs_avg, aes(x=cond, y=mean, fill=cond)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(aes(ymin=mean-1.96*se, ymax=mean+1.96*se), width=.3) +
+  guides(fill=FALSE) +
+  facet_grid(.~ROI) +
+  labs(x="Conditions", y="Mean betas with 95% CIs")
+
+# the organization of cond threw me for a loop (heh)
+# what if i wanted to just use some of the ROIs? (select)
+```
